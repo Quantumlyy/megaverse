@@ -1,4 +1,5 @@
 import { Type, type Static } from "@sinclair/typebox"
+import { StringEnum } from "./helper/typebox"
 import { _, P, B, R, W, V, U, D, L, A } from "./constants"
 
 export const SOLOON_COLORS = ["blue", "red", "purple", "white"] as const
@@ -20,17 +21,11 @@ export const CELL_TYPES = [
   A,
 ] as const
 
-export const SoloonColorSchema = Type.Union(
-  SOLOON_COLORS.map((c) => Type.Literal(c))
-)
+export const SoloonColorSchema = StringEnum(SOLOON_COLORS)
 
-export const ComethDirectionSchema = Type.Union(
-  COMETH_DIRECTIONS.map((d) => Type.Literal(d))
-)
+export const ComethDirectionSchema = StringEnum(COMETH_DIRECTIONS)
 
-export const CellSchema = Type.Union(
-  CELL_TYPES.map((c) => Type.Literal(c))
-)
+export const CellSchema = StringEnum(CELL_TYPES)
 export type Cell = Static<typeof CellSchema>
 export type PlacedCell = Exclude<Cell, typeof _>
 

@@ -6,4 +6,4 @@ export interface Placement {
   cell: PlacedCell
 }
 
-export type Grid<T = Cell> = ReadonlyArray<ReadonlyArray<T>>
+export type Grid<T = Cell> = T[][]
