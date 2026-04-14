@@ -15,6 +15,12 @@ importers:
         specifier: ^6.0.2
         version: 6.0.2
 
+  packages/core:
+    dependencies:
+      '@sinclair/typebox':
+        specifier: ^0.34.49
+        version: 0.34.49
+
   packages/engine:
     dependencies:
       '@effect/platform':
