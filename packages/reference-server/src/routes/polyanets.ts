@@ -5,7 +5,7 @@ import { placePolyanet, remove } from "../lib/candidateHandler";
 
 export const polyanetRoutes = new Elysia({ prefix: "/polyanets" })
   .post(
-    "/api/polyanets",
+    "/",
     ({ body }) => {
       placePolyanet(body.candidateId, body.row, body.column);
       return {};
@@ -16,7 +16,7 @@ export const polyanetRoutes = new Elysia({ prefix: "/polyanets" })
     }
   )
   .delete(
-    "/api/polyanets",
+    "/",
     ({ body }) => {
       remove(body.candidateId, body.row, body.column);
       return {};

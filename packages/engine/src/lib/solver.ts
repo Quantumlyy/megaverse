@@ -40,7 +40,7 @@ export class Solver {
       const { row, col, cell } = placement;
       this.tracker.onPlacementStarted(row, col, cell, 1);
 
-      await new Promise(r => setTimeout(r, 400));
+      await new Promise((r) => setTimeout(r, 400));
 
       try {
         await this.place(placement);

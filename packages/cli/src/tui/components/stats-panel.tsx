@@ -1,4 +1,5 @@
-import { Box, Text } from "ink";
+import { TitledBox } from "@mishieck/ink-titled-box";
+import { Text } from "ink";
 // biome-ignore lint/style/useImportType: Ugh
 import React from "react";
 
@@ -14,8 +15,13 @@ const StatsPanel: React.FC<StatsPanelProps> = ({ stats, complete }) => {
   const bar = "█".repeat(Math.round(pct / 5)) + "░".repeat(20 - Math.round(pct / 5));
 
   return (
-    <Box flexDirection="column" borderStyle="round" paddingX={1}>
-      <Text bold>Progress</Text>
+    <TitledBox
+      flexDirection="column"
+      borderStyle="round"
+      paddingX={1}
+      flexGrow={1}
+      titles={["Progress"]}
+    >
       <Text>
         {bar} {pct}%
       </Text>
@@ -32,7 +38,7 @@ const StatsPanel: React.FC<StatsPanelProps> = ({ stats, complete }) => {
         skipped: <Text dimColor>{stats.skipped}</Text>
       </Text>
       {complete && <Text color="green">✓ complete</Text>}
-    </Box>
+    </TitledBox>
   );
 };
 

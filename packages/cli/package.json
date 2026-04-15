@@ -13,6 +13,8 @@
   "dependencies": {
     "@megaverse/core": "workspace:*",
     "@megaverse/engine": "workspace:*",
+    "@mishieck/ink-titled-box": "^0.4.2",
+    "fullscreen-ink": "^0.1.0",
     "ink": "^7.0.0",
     "react": "^19.2.5"
   },

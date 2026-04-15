@@ -1,5 +1,5 @@
 import { MegaverseClient } from "@megaverse/engine";
-import { render } from "ink";
+import { withFullScreen } from "fullscreen-ink";
 
 import App from "./tui/app";
 
@@ -12,4 +12,8 @@ if (!candidateId) {
 }
 
 const client = new MegaverseClient(candidateId, baseUrl);
-render(<App client={client} candidateId={candidateId} baseUrl={baseUrl} />);
+
+const ink = withFullScreen(<App client={client} candidateId={candidateId} baseUrl={baseUrl} />);
+
+await ink.start();
+await ink.waitUntilExit();

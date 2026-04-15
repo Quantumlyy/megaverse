@@ -1,5 +1,6 @@
 import type { Grid } from "@megaverse/core";
 import { utils } from "@megaverse/core";
+import { TitledBox } from "@mishieck/ink-titled-box";
 import { Box, Text } from "ink";
 // biome-ignore lint/style/useImportType: Ugh
 import React from "react";
@@ -22,8 +23,19 @@ interface GridPanelProps {
 
 const GridPanel: React.FC<GridPanelProps> = ({ title, grid, cellStates }) => {
   return (
-    <Box flexDirection="column" borderStyle="round" paddingX={1}>
-      <Text bold>{title}</Text>
+    <TitledBox
+      flexDirection="column"
+      borderStyle="round"
+      paddingX={1}
+      flexGrow={1}
+      alignItems="center"
+      justifyContent="center"
+      borderTop
+      borderBottom
+      borderLeft
+      borderRight
+      titles={[title]}
+    >
       {grid.map((row, r) => (
         // biome-ignore lint/suspicious/noArrayIndexKey: what else would I use ffs
         <Box key={r}>
@@ -33,14 +45,14 @@ const GridPanel: React.FC<GridPanelProps> = ({ title, grid, cellStates }) => {
 
             return (
               // biome-ignore lint/suspicious/noArrayIndexKey: what else would I use ffs
-              <Text key={`${r},${c}`} color={color || ''}>
+              <Text key={`${r},${c}`} color={color || ""}>
                 {utils.cellToEmoji(cell)}
               </Text>
             );
           })}
         </Box>
       ))}
-    </Box>
+    </TitledBox>
   );
 };
 

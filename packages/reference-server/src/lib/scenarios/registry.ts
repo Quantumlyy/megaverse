@@ -1,6 +1,6 @@
 import type { Grid } from "@megaverse/core";
 
-import { compass, mosaicGoal, mosaicStart, rainbow, single, xCross } from "./hand";
+import { compass, mosaicGoal, mosaicStart, phase2, rainbow, single, xCross } from "./hand";
 
 export interface Scenario {
   readonly id: string;
@@ -23,6 +23,11 @@ export const SCENARIOS: {
     id: "x-cross",
     description: "11x11 Phase 1 X-cross — the classic",
     goal: xCross,
+  },
+  phase2: {
+    id: "phase2",
+    description: "11x11 Phase 2 — the classic",
+    goal: phase2,
   },
   rainbow: {
     id: "rainbow",
