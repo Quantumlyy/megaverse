@@ -8,24 +8,48 @@ import type { ProgressTracker } from "./progress/tracker";
 
 const { _ } = constants;
 
-interface Plan {
+export interface Plan {
   readonly todo: ReadonlyArray<Placement>;
   readonly skipped: number;
 }
 
+export interface RetryOptions {
+  maxAttempts: number;
+  baseDelayMs: number;
+  maxDelayMs: number;
+  shouldRetry?: (err: unknown) => boolean;
+}
+
+const DEFAULT_RETRY: RetryOptions = {
+  maxAttempts: 5,
+  baseDelayMs: 500,
+  maxDelayMs: 8_000,
+  shouldRetry: () => true,
+};
+
+const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
+
 export class Solver {
   private readonly client: MegaverseClient;
   private readonly tracker: ProgressTracker;
+  private readonly retryOptions: RetryOptions;
 
   public constructor(
     client: MegaverseClient,
-    tracker: ProgressTracker = new NoopProgressTracker()
+    tracker: ProgressTracker = new NoopProgressTracker(),
+    retryOptions: RetryOptions = DEFAULT_RETRY
   ) {
     this.client = client;
     this.tracker = tracker;
+    this.retryOptions = retryOptions;
   }
 
   public async solve(): Promise<void> {
+    const plan = await this.plan();
+    await this.execute(plan);
+  }
+
+  public async plan(): Promise<Plan> {
     const [goal, current] = await Promise.all([
       this.client.fetchGoal(),
       this.client.fetchCurrent(),
@@ -33,32 +57,23 @@ export class Solver {
 
     this.tracker.onStart(current, goal);
 
-    const plan = this.plan(goal, current);
+    const plan = this.computePlan(goal, current);
     this.tracker.onPlan(plan.todo.length, plan.skipped);
 
+    return plan;
+  }
+
+  public async execute(plan: Plan): Promise<void> {
+    this.tracker.onSolveStart();
+
     for (const placement of plan.todo) {
-      const { row, col, cell } = placement;
-      this.tracker.onPlacementStarted(row, col, cell, 1);
-
-      await new Promise((r) => setTimeout(r, 400));
-
-      try {
-        await this.place(placement);
-        this.tracker.onPlacementSucceeded(row, col, cell, 1);
-      } catch (err) {
-        this.tracker.onPlacementFailed(
-          row,
-          col,
-          err instanceof Error ? err.message : String(err),
-          1
-        );
-      }
+      await this.placeWithRetry(placement);
     }
 
     this.tracker.onComplete();
   }
 
-  protected plan(goal: Grid, current: Grid): Plan {
+  protected computePlan(goal: Grid, current: Grid): Plan {
     const todo: Array<Placement> = [];
     let skipped = 0;
 
@@ -77,6 +92,30 @@ export class Solver {
     return { todo, skipped };
   }
 
+  protected async placeWithRetry(placement: Placement): Promise<void> {
+    const { row, col, cell } = placement;
+    const opts = this.retryOptions;
+
+    for (let attempt = 1; attempt <= opts.maxAttempts; attempt++) {
+      this.tracker.onPlacementStarted(row, col, cell, attempt);
+
+      try {
+        await this.place(placement);
+        this.tracker.onPlacementSucceeded(row, col, cell, attempt);
+        return;
+      } catch (err) {
+        const reason = err instanceof Error ? err.message : String(err);
+        this.tracker.onPlacementFailed(row, col, reason, attempt);
+
+        const lastAttempt = attempt === opts.maxAttempts;
+        const retryable = opts.shouldRetry?.(err) ?? true;
+        if (lastAttempt || !retryable) return;
+
+        await sleep(this.backoffDelay(attempt));
+      }
+    }
+  }
+
   protected place(placement: Placement): Promise<void> {
     const { row, col, cell } = placement;
 
@@ -93,5 +132,13 @@ export class Solver {
     }
 
     throw new Error(`Cannot place SPACE at (${row},${col})`);
+  }
+
+  private backoffDelay(attempt: number): number {
+    const { maxDelayMs, baseDelayMs } = this.retryOptions;
+
+    const exp = Math.min(maxDelayMs, baseDelayMs * 2 ** (attempt - 1));
+
+    return Math.random() * exp;
   }
 }

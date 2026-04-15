@@ -18,6 +18,11 @@ export interface ProgressTracker {
   onPlan(total: number, skipped: number, ts?: number): void;
 
   /**
+   * @param ts TS of occurrence
+   */
+  onSolveStart(ts?: number): void;
+
+  /**
    * @param row The row of the cell
    * @param col The column of the cell
    * @param cell The cell to be placed
