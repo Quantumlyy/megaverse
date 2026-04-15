@@ -16,13 +16,10 @@ export interface MegaverseClientOptions {
 }
 
 export class MegaverseClient {
-  private readonly candidateId: string;
-  private readonly baseUrl: string;
-
-  public constructor(candidateId: string, baseUrl: string = "https://challenge.crossmint.com/api") {
-    this.candidateId = candidateId;
-    this.baseUrl = baseUrl;
-  }
+  public constructor(
+    public readonly candidateId: string,
+    public readonly baseUrl: string = "https://challenge.crossmint.com/api"
+  ) {}
 
   public async fetchGoal(): Promise<Grid> {
     const { goal } = await this.request(

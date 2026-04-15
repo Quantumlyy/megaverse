@@ -9,7 +9,7 @@ import type { ProgressTracker } from "./progress/tracker";
 const { _ } = constants;
 
 export interface Plan {
-  readonly todo: ReadonlyArray<Placement>;
+  readonly todo: Placement[];
   readonly skipped: number;
 }
 
@@ -30,21 +30,14 @@ const DEFAULT_RETRY: RetryOptions = {
 const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
 
 export class Solver {
-  private readonly client: MegaverseClient;
-  private readonly tracker: ProgressTracker;
-  private readonly retryOptions: RetryOptions;
-
   public constructor(
-    client: MegaverseClient,
-    tracker: ProgressTracker = new NoopProgressTracker(),
-    retryOptions: RetryOptions = DEFAULT_RETRY
-  ) {
-    this.client = client;
-    this.tracker = tracker;
-    this.retryOptions = retryOptions;
-  }
+    private readonly client: MegaverseClient,
+    private readonly tracker: ProgressTracker = new NoopProgressTracker(),
+    private readonly retryOptions: RetryOptions = DEFAULT_RETRY,
+    private readonly concurrency: number = 4
+  ) {}
 
-  public async solve(): Promise<void> {
+  public async solve() {
     const plan = await this.plan();
     await this.execute(plan);
   }
@@ -63,13 +56,18 @@ export class Solver {
     return plan;
   }
 
-  public async execute(plan: Plan): Promise<void> {
+  public async execute(plan: Plan) {
     this.tracker.onSolveStart();
 
-    for (const placement of plan.todo) {
-      await this.placeWithRetry(placement);
-    }
+    const worker = async () => {
+      while (plan.todo.length > 0) {
+        const p = plan.todo.shift();
+        if (!p) return;
+        await this.placeWithRetry(p);
+      }
+    };
 
+    await Promise.all(Array.from({ length: this.concurrency }, worker));
     this.tracker.onComplete();
   }
 
@@ -92,7 +90,7 @@ export class Solver {
     return { todo, skipped };
   }
 
-  protected async placeWithRetry(placement: Placement): Promise<void> {
+  protected async placeWithRetry(placement: Placement) {
     const { row, col, cell } = placement;
     const opts = this.retryOptions;
 
@@ -116,7 +114,7 @@ export class Solver {
     }
   }
 
-  protected place(placement: Placement): Promise<void> {
+  protected place(placement: Placement) {
     const { row, col, cell } = placement;
 
     if (cell === "POLYANET") return this.client.placePolyanet(row, col);
@@ -134,7 +132,7 @@ export class Solver {
     throw new Error(`Cannot place SPACE at (${row},${col})`);
   }
 
-  private backoffDelay(attempt: number): number {
+  private backoffDelay(attempt: number) {
     const { maxDelayMs, baseDelayMs } = this.retryOptions;
 
     const exp = Math.min(maxDelayMs, baseDelayMs * 2 ** (attempt - 1));

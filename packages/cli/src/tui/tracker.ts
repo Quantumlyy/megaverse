@@ -74,18 +74,28 @@ export class TuiProgressTracker implements ProgressTracker {
     });
   }
 
+  public onSolveStart(ts: number = Date.now()) {
+    this.set({
+      log: this.appendLog(LogLevel.INFO, "Execution started", ts),
+    });
+  }
+
   public onPlacementStarted(
     row: number,
     col: number,
     _cell: Cell,
-    _attempt: number = 1,
+    attempt: number = 1,
     _ts: number = Date.now()
   ) {
     const cellStates = new Map(this.state.cellStates);
     cellStates.set(`${row},${col}`, "pending");
     this.set({
       cellStates,
-      stats: { ...this.state.stats, pending: this.state.stats.pending + 1 },
+      stats: {
+        ...this.state.stats,
+        pending: this.state.stats.pending + 1,
+        retries: attempt > 1 ? this.state.stats.retries + 1 : this.state.stats.retries,
+      },
     });
   }
 
@@ -134,6 +144,7 @@ export class TuiProgressTracker implements ProgressTracker {
         ...this.state.stats,
         failed: this.state.stats.failed + 1,
         pending: this.state.stats.pending - 1,
+        attempts: this.state.stats.attempts + 1,
       },
       log: this.appendLog(LogLevel.ERR, `failed (${row},${col}): ${reason}`, ts),
     });

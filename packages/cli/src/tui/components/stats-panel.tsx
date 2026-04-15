@@ -32,6 +32,12 @@ const StatsPanel: React.FC<StatsPanelProps> = ({ stats, complete }) => {
         pending: <Text color="yellow">{stats.pending}</Text>
       </Text>
       <Text>
+        attempts: <Text color="cyan">{stats.attempts}</Text>
+      </Text>
+      <Text>
+        retries: <Text color="yellow">{stats.retries}</Text>
+      </Text>
+      <Text>
         failed: <Text color="red">{stats.failed}</Text>
       </Text>
       <Text>
