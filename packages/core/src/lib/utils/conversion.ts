@@ -27,6 +27,13 @@ const COMETH_BY_DIRECTION = {
   right: A,
 } as const;
 
+/**
+ * Converts an internal non-empty cell token into the raw payload shape used by the Megaverse API.
+ *
+ * @typeParam T - Non-empty cell token type being converted.
+ * @param cell - Internal cell token to convert.
+ * @returns Raw API payload for the corresponding placed cell.
+ */
 export function cellToServer<T extends PlacedCell>(cell: T) {
   return CELL_TO_SERVER[cell];
 }
@@ -42,6 +49,13 @@ type ServerToCell<T extends ServerCell> = T extends null
         ? (typeof COMETH_BY_DIRECTION)[D]
         : never;
 
+/**
+ * Converts a raw Megaverse API cell payload into the internal cell token used by the solver.
+ *
+ * @typeParam T - Raw server cell payload type being converted.
+ * @param sc - Raw API cell payload, including `null` for empty space.
+ * @returns Internal cell token that corresponds to the server payload.
+ */
 export function serverToCell<T extends ServerCell>(sc: T): ServerToCell<T> {
   if (sc === null) return _ as ServerToCell<T>;
   switch (sc.type) {
