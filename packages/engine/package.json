@@ -10,15 +10,16 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "typecheck": "tsc --noEmit",
-    "lint": "biome check src",
-    "lint:fix": "biome check --write src",
-    "format": "biome format --write src"
+    "lint": "biome check src test vitest.config.ts",
+    "lint:fix": "biome check --write src test vitest.config.ts",
+    "format": "biome format --write src test vitest.config.ts"
   },
   "dependencies": {
     "@megaverse/core": "workspace:*",
     "@sinclair/typebox": "^0.34.49"
   },
   "devDependencies": {
+    "msw": "^2.11.3",
     "vitest": "^4.1.4"
   }
 }

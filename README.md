@@ -1,80 +1,113 @@
-# Megaverse Solver
+# Megaverse
 
-This repository contains a Crossmint Megaverse solver with a terminal UI, a reusable engine, shared schemas, and a local reference server for development and demos.
+> A TypeScript monorepo that solves the [Crossmint Megaverse coding challenge](https://challenge.crossmint.com/).
+> It includes a reusable solver engine, an Ink-based terminal UI, shared TypeBox
+> schemas, and a local Elysia server that emulates the Crossmint API for offline work.
+
+The challenge asks you to populate a 2D grid with 🪐 polyanets, 🌙 soloons,
+and ☄ comeths by calling a REST API. This repo solves it with a plan-then-execute
+flow: fetch goal and current grids, diff them, show the plan in the TUI, then
+execute writes only after confirmation.
 
 ![Megaverse solver terminal UI](docs/solver-ui.png)
 
-## Features
-
-- Terminal UI that shows the goal grid next to the current grid.
-- Plan-before-execute flow so you can review the diff before sending placements.
-- Live progress panel with totals, retries, failures, and skipped cells.
-- Execution log that records each placement attempt and result.
-- Solver engine with configurable retry and concurrency behavior.
-- Shared Megaverse cell types, payload schemas, and conversion helpers.
-- Local reference server with OpenAPI docs for offline testing.
-- Built-in local scenarios for smoke tests, phase replicas, and mixed-entity maps.
-
-## Prerequisites
-
-- Node.js
-- pnpm
-
-## Install
+## Quick Start
 
 ```sh
 pnpm install
+pnpm run server
 ```
 
-## Run the CLI Against Crossmint
-
-The CLI defaults to `https://challenge.crossmint.com/api`, so you only need to provide your candidate ID.
+In another terminal:
 
 ```sh
-CANDIDATE_ID=<your-candidate-id> pnpm cli
+CANDIDATE_ID=phase2 \
+  MEGAVERSE_BASE_URL=http://localhost:3001/api \
+  pnpm run cli
 ```
 
-## Run the Local Reference Server
+Press `Enter` or `Space` to execute the plan. Press `Ctrl+C` to exit.
 
-Start the mock server in one terminal:
+## Run Against Crossmint
 
 ```sh
-pnpm server
+CANDIDATE_ID=<your-candidate-id> pnpm run cli
 ```
 
-The server listens on `http://localhost:3001` and serves the Megaverse API under `http://localhost:3001/api`.
+If `MEGAVERSE_BASE_URL` is unset, the CLI uses `https://challenge.crossmint.com/api`.
 
-OpenAPI UI:
+## Scripts
 
-```text
-http://localhost:3001/openapi
-```
-
-## Run the CLI Against the Local Reference Server
-
-Start the server first, then point the CLI at the local API in a second terminal. For local runs, `CANDIDATE_ID` selects the scenario to load.
-
-```sh
-CANDIDATE_ID=phase2 MEGAVERSE_BASE_URL=http://localhost:3001/api pnpm cli
-```
-
-## Available Local Scenarios
-
-- `single`: 3x3, one polyanet; smoke test.
-- `x-cross`: 11x11 Phase 1 X-cross; the classic.
-- `phase2`: 11x11 Phase 2; the classic.
-- `rainbow`: 7x9 repeating soloon rainbow; exercises all four colors.
-- `compass`: 9x9 compass; central polyanet with comeths on each axis.
-- `mosaic`: 10x10 mixed entities with a partial starting state; exercises diffing.
+| Script | What it does |
+| --- | --- |
+| `pnpm run cli` | Run the Ink TUI against `MEGAVERSE_BASE_URL` or the default Crossmint API. |
+| `pnpm run cli:mock` | Runs the same CLI script but sets `MEGAVERSE_MOCK=1`. This is currently equivalent to `cli` because `MEGAVERSE_MOCK` is not read anywhere. |
+| `pnpm run server` | Start the local reference server on `http://localhost:3001`. OpenAPI UI is served at `http://localhost:3001/openapi`. |
+| `pnpm run test` | Run recursive package tests. Right now only `@megaverse/engine` defines a test script. |
+| `pnpm run typecheck` | Run recursive package typechecks. |
 
 ## Environment Variables
 
-- `CANDIDATE_ID`: Required. Crossmint candidate ID for the real API, or a scenario ID when using the local reference server.
-- `MEGAVERSE_BASE_URL`: Optional. Overrides the API base URL. Defaults to `https://challenge.crossmint.com/api`.
+| Variable | Required | Default | Notes |
+| --- | --- | --- | --- |
+| `CANDIDATE_ID` | Yes | — | Crossmint candidate ID for the real API, or a scenario ID for the local reference server. |
+| `MEGAVERSE_BASE_URL` | No | `https://challenge.crossmint.com/api` | Override the API base URL. Use `http://localhost:3001/api` for the local server. |
+| `MEGAVERSE_MOCK` | No | unset | No-op. Set by `pnpm run cli:mock`, but the CLI never reads it. |
 
-## Package Overview
+## Local Scenarios
 
-- `@megaverse/core`: Shared cell constants, TypeBox schemas, wire payloads, and conversion/render helpers.
-- `@megaverse/engine`: API client, solver, and progress tracking interfaces used by the CLI.
-- `@megaverse/cli`: Ink-based terminal UI for planning and executing Megaverse placements.
-- `@megaverse/reference-server`: Local Elysia server that emulates the Megaverse API and exposes scenario-based maps.
+When the CLI points at the reference server, `CANDIDATE_ID` selects a scenario:
+
+| ID | Size | Description |
+| --- | --- | --- |
+| `single` | 3x3 | One polyanet; smoke test. |
+| `x-cross` | 11x11 | Phase 1 X-cross. |
+| `phase2` | 30x30 | Phase 2 mixed-entity map. |
+| `rainbow` | 7x9 | Repeating soloon rainbow that exercises all four colors. |
+| `compass` | 9x9 | Central polyanet with comeths on each axis. |
+| `mosaic` | 10x10 | Mixed entities with a partial starting state to exercise diffing. |
+
+Unknown scenario IDs fall back to `x-cross`. The reference server keeps one in-memory
+grid per `CANDIDATE_ID`; restarting the server resets that state.
+
+## Prerequisites
+
+- Node.js. The repo does not pin a Node version, so use a recent Node release with ESM and top-level `await` support.
+- `pnpm@10.33.0`, as pinned in the root `packageManager` field.
+
+## Packages
+
+| Package | Role |
+| --- | --- |
+| `@megaverse/core` | Shared cell tokens, TypeBox schemas, wire payloads, conversion helpers, and grid types. |
+| `@megaverse/engine` | `MegaverseClient`, `Solver`, and progress-tracking interfaces. |
+| `@megaverse/cli` | Ink + React terminal UI that plans on mount and executes after confirmation. |
+| `@megaverse/reference-server` | Local Elysia implementation of the Megaverse API with scenario-backed in-memory state. |
+
+## How It Works
+
+The solver has two phases:
+
+1. Plan: fetch `/map/:candidateId/goal` and `/map/:candidateId`, diff the grids, skip already-correct cells, and build a placement list.
+2. Execute: run placement workers with bounded concurrency and retry failed writes using exponential backoff with jitter.
+
+For component diagrams, tracker internals, retry/backoff math, and reference-server
+state flow, see [docs/architecture.md](docs/architecture.md).
+
+## Known Limitations
+
+- The planner is additive. `MegaverseClient` exposes delete methods and the reference server implements delete routes, but `Solver.computePlan()` only schedules placements for non-`SPACE` goal cells.
+- `MEGAVERSE_MOCK` is dead code today. The script exists; the CLI does not read that env var.
+- The local reference server hardcodes `phase: 1` in current-map responses, even for `phase2`.
+- `TuiProgressTracker` counts `failed` by failed attempt, not by distinct cell.
+- The local reference server is in-memory only; restarting it resets scenario progress.
+
+## Notes & API Quirks
+
+The [notes/](notes/) directory is the original discovery log for the challenge.
+It includes useful API observations, including the richer shape returned by
+`GET /api/map/:candidateId`.
+
+## License
+
+MIT — see [LICENSE](LICENSE).
