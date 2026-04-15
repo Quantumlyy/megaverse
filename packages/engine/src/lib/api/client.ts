@@ -5,7 +5,7 @@ import {
   CurrentMapResponseSchema,
   GoalMapResponseSchema,
   utils,
-  type Cell,
+  type Grid,
   type ComethDirection,
   type SoloonColor,
 } from "@megaverse/core";
@@ -19,12 +19,12 @@ export class MegaverseClient {
   private readonly candidateId: string;
   private readonly baseUrl: string;
 
-  constructor(options: MegaverseClientOptions) {
-    this.candidateId = options.candidateId;
-    this.baseUrl = options.baseUrl ?? "https://challenge.crossmint.com/api";
+  public constructor(candidateId: string, baseUrl: string = "https://challenge.crossmint.com/api") {
+    this.candidateId = candidateId;
+    this.baseUrl = baseUrl;
   }
 
-  public async fetchGoal(): Promise<Cell[][]> {
+  public async fetchGoal(): Promise<Grid> {
     const { goal } = await this.request(
       "GET",
       "/map/[candidateId]/goal",
@@ -35,7 +35,7 @@ export class MegaverseClient {
     return goal;
   }
 
-  public async fetchCurrent(): Promise<Cell[][]> {
+  public async fetchCurrent(): Promise<Grid> {
     const { map } = await this.request(
       "GET",
       "/map/[candidateId]",
