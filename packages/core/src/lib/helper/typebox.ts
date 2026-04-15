@@ -1,4 +1,4 @@
-import { Type } from "@sinclair/typebox";
+import { type TString, Type } from "@sinclair/typebox";
 
 /**
  * A TypeBox utility that converts an array of provided strings into a string enum.
@@ -10,9 +10,7 @@ export function StringEnum<T extends readonly string[]>(
   allowedValues: T,
   options?: { default: T[number] }
 ) {
-  return Type.Unsafe<T[number]>({
-    type: "string",
-    enum: allowedValues,
-    ...options,
-  });
+  return Type.String({ ...options, enum: allowedValues as unknown as string[] }) as TString & {
+    enum: T;
+  } & { static: T[number] };
 }

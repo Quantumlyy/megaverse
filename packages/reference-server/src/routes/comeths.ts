@@ -3,9 +3,9 @@ import { Elysia, t } from "elysia";
 
 import { placeCometh, remove } from "../lib/candidateHandler";
 
-export const comethRoutes = new Elysia()
+export const comethRoutes = new Elysia({ prefix: "/comeths" })
   .post(
-    "/api/comeths",
+    "/",
     ({ body }) => {
       placeCometh(body.candidateId, body.row, body.column, body.direction);
       return {};
@@ -16,7 +16,7 @@ export const comethRoutes = new Elysia()
     }
   )
   .delete(
-    "/api/comeths",
+    "/",
     ({ body }) => {
       remove(body.candidateId, body.row, body.column);
       return {};

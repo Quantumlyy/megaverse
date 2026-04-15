@@ -31,7 +31,7 @@ export class Solver {
       this.client.fetchCurrent(),
     ]);
 
-    this.tracker.onStart(goal, current);
+    this.tracker.onStart(current, goal);
 
     const plan = this.plan(goal, current);
     this.tracker.onPlan(plan.todo.length, plan.skipped);
@@ -39,6 +39,8 @@ export class Solver {
     for (const placement of plan.todo) {
       const { row, col, cell } = placement;
       this.tracker.onPlacementStarted(row, col, cell, 1);
+
+      await new Promise(r => setTimeout(r, 400));
 
       try {
         await this.place(placement);

@@ -3,7 +3,7 @@ import { Elysia, t } from "elysia";
 
 import { getGoal, getGrid } from "../lib/candidateHandler";
 
-export const mapRoutes = new Elysia({ prefix: "/api/map" })
+export const mapRoutes = new Elysia({ prefix: "/map" })
   .get("/:candidateId/goal", ({ params }) => ({ goal: getGoal(params.candidateId) }), {
     params: t.Object({ candidateId: t.String() }),
     response: GoalMapResponseSchema,

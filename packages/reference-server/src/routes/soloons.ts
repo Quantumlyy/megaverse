@@ -3,9 +3,9 @@ import { SoloonBodySchema, SoloonColorSchema } from "@megaverse/core";
 
 import { placeSoloon, remove } from "../lib/candidateHandler";
 
-export const soloonRoutes = new Elysia()
+export const soloonRoutes = new Elysia({ prefix: "/soloons" })
   .post(
-    "/api/soloons",
+    "/",
     ({ body }) => {
       placeSoloon(body.candidateId, body.row, body.column, body.color);
       return {};
@@ -16,7 +16,7 @@ export const soloonRoutes = new Elysia()
     }
   )
   .delete(
-    "/api/soloons",
+    "/",
     ({ body }) => {
       remove(body.candidateId, body.row, body.column);
       return {};

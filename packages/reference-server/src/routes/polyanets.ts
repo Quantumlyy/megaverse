@@ -3,7 +3,7 @@ import { Elysia } from "elysia";
 
 import { placePolyanet, remove } from "../lib/candidateHandler";
 
-export const polyanetRoutes = new Elysia()
+export const polyanetRoutes = new Elysia({ prefix: "/polyanets" })
   .post(
     "/api/polyanets",
     ({ body }) => {
