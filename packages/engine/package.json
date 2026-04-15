@@ -9,10 +9,14 @@
   "scripts": {
     "test": "vitest run",
     "test:watch": "vitest",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "lint": "biome check src",
+    "lint:fix": "biome check --write src",
+    "format": "biome format --write src"
   },
   "dependencies": {
-    "@megaverse/core": "workspace:*"
+    "@megaverse/core": "workspace:*",
+    "@sinclair/typebox": "^0.34.49"
   },
   "devDependencies": {
     "vitest": "^4.1.4"
