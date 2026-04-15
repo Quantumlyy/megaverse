@@ -52,7 +52,6 @@ If `MEGAVERSE_BASE_URL` is unset, the CLI uses `https://challenge.crossmint.com/
 | --- | --- | --- | --- |
 | `CANDIDATE_ID` | Yes | — | Crossmint candidate ID for the real API, or a scenario ID for the local reference server. |
 | `MEGAVERSE_BASE_URL` | No | `https://challenge.crossmint.com/api` | Override the API base URL. Use `http://localhost:3001/api` for the local server. |
-| `MEGAVERSE_MOCK` | No | unset | No-op. Set by `pnpm run cli:mock`, but the CLI never reads it. |
 
 ## Local Scenarios
 
@@ -93,14 +92,6 @@ The solver has two phases:
 
 For component diagrams, tracker internals, retry/backoff math, and reference-server
 state flow, see [docs/architecture.md](docs/architecture.md).
-
-## Known Limitations
-
-- The planner is additive. `MegaverseClient` exposes delete methods and the reference server implements delete routes, but `Solver.computePlan()` only schedules placements for non-`SPACE` goal cells.
-- `MEGAVERSE_MOCK` is dead code today. The script exists; the CLI does not read that env var.
-- The local reference server hardcodes `phase: 1` in current-map responses, even for `phase2`.
-- `TuiProgressTracker` counts `failed` by failed attempt, not by distinct cell.
-- The local reference server is in-memory only; restarting it resets scenario progress.
 
 ## Notes & API Quirks
 
