@@ -1,15 +1,19 @@
-import type { Grid } from "@megaverse/core"
+import type { Grid } from "@megaverse/core";
 
-import { single, xCross, rainbow, compass, mosaicGoal, mosaicStart } from "./hand"
+import { compass, mosaicGoal, mosaicStart, rainbow, single, xCross } from "./hand";
 
 export interface Scenario {
-  readonly id: string
-  readonly description: string
-  readonly goal: Grid
-  readonly startingCurrent?: Grid
+  readonly id: string;
+  readonly description: string;
+  readonly goal: Grid;
+  readonly startingCurrent?: Grid;
 }
 
-export const SCENARIOS: Record<string, Scenario> = {
+export const DEFAULT_SCENARIO = "x-cross" as const;
+
+export const SCENARIOS: {
+  [DEFAULT_SCENARIO]: Scenario;
+} & Record<string, Scenario> = {
   single: {
     id: "single",
     description: "3x3, one polyanet — smoke test",
@@ -36,10 +40,8 @@ export const SCENARIOS: Record<string, Scenario> = {
     goal: mosaicGoal,
     startingCurrent: mosaicStart,
   },
-}
-
-export const DEFAULT_SCENARIO = "x-cross"
+};
 
 export function resolveScenario(candidateId: string): Scenario {
-  return SCENARIOS[candidateId] ?? SCENARIOS[DEFAULT_SCENARIO]!
+  return SCENARIOS[candidateId] ?? SCENARIOS[DEFAULT_SCENARIO];
 }

@@ -1,5 +1,5 @@
-import type { Cell } from "../cells"
-import { _, P, B, R, V, W, U, D, L, A } from "../constants"
+import type { Cell } from "../cells";
+import { _, A, B, D, L, P, R, U, V, W } from "../constants";
 
 // thx Claude
 // Terminal-friendly glyphs for each cell type.
@@ -16,7 +16,7 @@ export const CELL_EMOJI = {
   [D]: "⬇️ ",
   [L]: "⬅️ ",
   [A]: "➡️ ",
-} as const
+} as const;
 
 // thx Claude
 // ANSI-block fallback using coloured squares. Emoji have inconsistent
@@ -33,12 +33,12 @@ export const CELL_BLOCK = {
   [D]: "\x1b[33m▼\x1b[0m", // yellow
   [L]: "\x1b[33m◀\x1b[0m", // yellow
   [A]: "\x1b[33m▶\x1b[0m", // yellow
-} as const
+} as const;
 
 export function cellToEmoji<T extends Cell>(cell: T) {
-  return CELL_EMOJI[cell]
+  return CELL_EMOJI[cell];
 }
 
 export function cellToBlock<T extends Cell>(cell: T) {
-  return CELL_BLOCK[cell]
+  return CELL_BLOCK[cell];
 }

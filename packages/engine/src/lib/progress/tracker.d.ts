@@ -1,4 +1,4 @@
-import type { Grid, Cell } from "@megaverse/core"
+import type { Grid, Cell } from "@megaverse/core";
 
 // One of these days we will get Temporal 😭
 // https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Temporal
@@ -8,14 +8,14 @@ export interface ProgressTracker {
    * @param initial The initial grid from (/api/map/[candidateId])
    * @param ts TS of occurrence
    */
-  onStart(initial: Grid, goal: Grid, ts?: number): void
+  onStart(initial: Grid, goal: Grid, ts?: number): void;
 
   /**
    * @param total The total number of operations required to solve the map
    * @param skipped The number of operations skipped due to already being in the goal state
    * @param ts TS of occurrence
    */
-  onPlan(total: number, skipped: number, ts?: number): void
+  onPlan(total: number, skipped: number, ts?: number): void;
 
   /**
    * @param row The row of the cell
@@ -24,7 +24,7 @@ export interface ProgressTracker {
    * @param attempt The attempt number
    * @param ts TS of occurrence
    */
-  onPlacementStarted(row: number, col: number, cell: Cell, attempt?: number, ts?: number): void
+  onPlacementStarted(row: number, col: number, cell: Cell, attempt?: number, ts?: number): void;
   /**
    * @param row The row of the cell
    * @param col The column of the cell
@@ -32,7 +32,7 @@ export interface ProgressTracker {
    * @param attempt The attempt number
    * @param ts TS of occurrence
    */
-  onPlacementFailed(row: number, col: number, reason: string, attempt?: number, ts?: number): void
+  onPlacementFailed(row: number, col: number, reason: string, attempt?: number, ts?: number): void;
   /**
    * @param row The row of the cell
    * @param col The column of the cell
@@ -40,10 +40,10 @@ export interface ProgressTracker {
    * @param attempt The attempt number
    * @param ts TS of occurrence
    */
-  onPlacementSucceeded(row: number, col: number, cell: Cell, attempt?: number, ts?: number): void
+  onPlacementSucceeded(row: number, col: number, cell: Cell, attempt?: number, ts?: number): void;
 
   /**
    * @param ts TS of occurrence
    */
-  onComplete(ts?: number): void
+  onComplete(ts?: number): void;
 }

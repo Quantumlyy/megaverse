@@ -1,21 +1,17 @@
-import { Elysia, t } from "elysia"
-import { CurrentMapResponseSchema, GoalMapResponseSchema } from "@megaverse/core"
+import { CurrentMapResponseSchema, GoalMapResponseSchema } from "@megaverse/core";
+import { Elysia, t } from "elysia";
 
-import { getGoal, getGrid } from "../lib/candidateHandler"
+import { getGoal, getGrid } from "../lib/candidateHandler";
 
 export const mapRoutes = new Elysia({ prefix: "/api/map" })
-  .get(
-    "/:candidateId/goal",
-    ({ params }) => ({ goal: getGoal(params.candidateId) }),
-    {
-      params: t.Object({ candidateId: t.String() }),
-      response: GoalMapResponseSchema,
-      detail: {
-        summary: "Get goal map",
-        tags: ["Map"]
-      },
-    }
-  )
+  .get("/:candidateId/goal", ({ params }) => ({ goal: getGoal(params.candidateId) }), {
+    params: t.Object({ candidateId: t.String() }),
+    response: GoalMapResponseSchema,
+    detail: {
+      summary: "Get goal map",
+      tags: ["Map"],
+    },
+  })
   .get(
     "/:candidateId",
     ({ params }) => ({
@@ -31,4 +27,4 @@ export const mapRoutes = new Elysia({ prefix: "/api/map" })
       response: CurrentMapResponseSchema,
       detail: { summary: "Get current map state", tags: ["Map"] },
     }
-  )
+  );

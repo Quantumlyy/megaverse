@@ -1,14 +1,14 @@
-import { Elysia } from "elysia"
+import { Elysia } from "elysia";
 
-import { mapRoutes } from "./map"
-import { polyanetRoutes } from "./polyanets"
-import { soloonRoutes } from "./soloons"
-import { comethRoutes } from "./comeths"
+import { comethRoutes } from "./comeths";
+import { mapRoutes } from "./map";
+import { polyanetRoutes } from "./polyanets";
+import { soloonRoutes } from "./soloons";
 
 export const routes = new Elysia()
   .use(mapRoutes)
   .use(polyanetRoutes)
   .use(soloonRoutes)
-  .use(comethRoutes)
+  .use(comethRoutes);
 
-export default routes
+export default routes;
