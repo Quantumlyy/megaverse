@@ -15,8 +15,11 @@
     "format": "biome format --write src test vitest.config.ts"
   },
   "dependencies": {
+    "@effect/platform": "^0.96.0",
+    "@effect/platform-node": "^0.106.0",
     "@megaverse/core": "workspace:*",
-    "@sinclair/typebox": "^0.34.49"
+    "@sinclair/typebox": "^0.34.49",
+    "effect": "^3.21.0"
   },
   "devDependencies": {
     "msw": "^2.11.3",

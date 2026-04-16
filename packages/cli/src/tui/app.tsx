@@ -1,8 +1,16 @@
-import { Solver, type MegaverseClient, type Plan } from "@megaverse/engine";
+import {
+  execute,
+  type MegaverseApi,
+  type Plan,
+  type Progress,
+  plan as planEffect,
+} from "@megaverse/engine";
+import type { ConfigError } from "effect";
+import { Effect, Fiber, type ManagedRuntime, Stream } from "effect";
 import { FullScreenBox } from "fullscreen-ink";
 import { Box, Text, useInput } from "ink";
-// biome-ignore lint/style/useImportType: Ugh
-import React, { useEffect, useState } from "react";
+// biome-ignore lint/style/useImportType: React must be a value import for JSX runtime
+import React, { useEffect, useMemo, useRef, useState } from "react";
 
 import GridPanel from "./components/grid-panel";
 import Header from "./components/header";
@@ -12,48 +20,100 @@ import { useTracker } from "./hooks/useTracker";
 import { TuiProgressTracker } from "./tracker";
 
 interface AppProps {
-  client: MegaverseClient;
-  candidateId: string;
-  baseUrl: string;
+  readonly runtime: ManagedRuntime.ManagedRuntime<MegaverseApi, ConfigError.ConfigError>;
+  readonly candidateId: string;
+  readonly baseUrl: string;
 }
 
-type Phase = "planning" | "ready" | "executing" | "done";
+type Phase = "planning" | "ready" | "executing" | "done" | "error";
 
-const App: React.FC<AppProps> = ({ client, candidateId, baseUrl }) => {
-  const [tracker] = useState(() => new TuiProgressTracker());
-  const [solver] = useState(() => new Solver(client, tracker, {
-    maxAttempts: 10,
-    baseDelayMs: 1000,
-    maxDelayMs: 20_000,
-  }, 3));
+/**
+ * Feed a {@link Progress} event into the CLI's {@link TuiProgressTracker},
+ * preserving the original `ProgressTracker` method call order so the UI state
+ * updates stay identical to the pre-Effect implementation.
+ */
+const applyProgress = (tracker: TuiProgressTracker, event: Progress) => {
+  switch (event._tag) {
+    case "Planned":
+      // onPlan already fired at plan-time; nothing else to do here.
+      return;
+    case "Started":
+      tracker.onPlacementStarted(event.row, event.col, event.cell, event.attempt);
+      return;
+    case "Placed":
+      tracker.onPlacementSucceeded(event.row, event.col, event.cell, event.attempt);
+      return;
+    case "Failed":
+      tracker.onPlacementFailed(event.row, event.col, event.reason, event.attempt);
+      return;
+    case "Complete":
+      tracker.onComplete();
+      return;
+  }
+};
+
+const App: React.FC<AppProps> = ({ runtime, candidateId, baseUrl }) => {
+  const tracker = useMemo(() => new TuiProgressTracker(), []);
   const [plan, setPlan] = useState<Plan | null>(null);
   const [phase, setPhase] = useState<Phase>("planning");
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const executionFiberRef = useRef<Fiber.RuntimeFiber<void, unknown> | null>(null);
   const state = useTracker(tracker);
 
   useEffect(() => {
-    solver
-      .plan()
-      .then((p) => {
-        setPlan(p);
-        setPhase("ready");
-      })
-      .catch((err) => {
-        console.error("Plan failed:", err);
-      });
-  }, [solver]);
+    const fiber = runtime.runFork(
+      planEffect.pipe(
+        Effect.tap((p) =>
+          Effect.sync(() => {
+            tracker.onStart(p.current, p.goal);
+            tracker.onPlan(p.todo.length, p.skipped);
+            setPlan(p);
+            setPhase("ready");
+          })
+        ),
+        Effect.catchAllCause((cause) =>
+          Effect.sync(() => {
+            setErrorMessage(`Plan failed: ${cause.toString()}`);
+            setPhase("error");
+          })
+        )
+      )
+    );
+    return () => {
+      Effect.runFork(Fiber.interrupt(fiber));
+    };
+  }, [runtime, tracker]);
 
   useInput((input, key) => {
     if (phase === "ready" && plan && (key.return || input === " ")) {
       setPhase("executing");
-      solver
-        .execute(plan)
-        .then(() => setPhase("done"))
-        .catch((err) => {
-          console.error("Execute failed:", err);
-          setPhase("done");
-        });
+      tracker.onSolveStart();
+      executionFiberRef.current = runtime.runFork(
+        execute(plan, {
+          retry: { maxAttempts: 10, baseDelayMs: 1000, maxDelayMs: 20_000 },
+          concurrency: 3,
+        }).pipe(
+          Stream.runForEach((event) => Effect.sync(() => applyProgress(tracker, event))),
+          Effect.tap(() => Effect.sync(() => setPhase("done"))),
+          Effect.catchAllCause((cause) =>
+            Effect.sync(() => {
+              setErrorMessage(`Execute failed: ${cause.toString()}`);
+              setPhase("error");
+            })
+          )
+        )
+      );
     }
   });
+
+  useEffect(() => {
+    return () => {
+      const fiber = executionFiberRef.current;
+      if (fiber) {
+        Effect.runFork(Fiber.interrupt(fiber));
+      }
+    };
+  }, []);
 
   return (
     <FullScreenBox flexDirection="column">
@@ -74,12 +134,15 @@ const App: React.FC<AppProps> = ({ client, candidateId, baseUrl }) => {
           <StatsPanel stats={state.stats} complete={state.complete} />
         </Box>
       </Box>
-      <Prompt phase={phase} />
+      <Prompt phase={phase} errorMessage={errorMessage} />
     </FullScreenBox>
   );
 };
 
-const Prompt: React.FC<{ phase: Phase }> = ({ phase }) => {
+const Prompt: React.FC<{ phase: Phase; errorMessage: string | null }> = ({
+  phase,
+  errorMessage,
+}) => {
   if (phase === "planning") {
     return (
       <Box paddingX={1}>
@@ -106,6 +169,13 @@ const Prompt: React.FC<{ phase: Phase }> = ({ phase }) => {
     return (
       <Box paddingX={1}>
         <Text color="cyan">⚡ Solving…</Text>
+      </Box>
+    );
+  }
+  if (phase === "error") {
+    return (
+      <Box paddingX={1}>
+        <Text color="red">✗ {errorMessage ?? "Unknown error"} — press Ctrl+C to exit</Text>
       </Box>
     );
   }

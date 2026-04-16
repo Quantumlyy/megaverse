@@ -1,6 +1,6 @@
-import { Elysia } from "elysia";
 import { node } from "@elysiajs/node";
 import { openapi } from "@elysiajs/openapi";
+import { Elysia } from "elysia";
 
 import routes from "./routes";
 

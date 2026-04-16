@@ -1,131 +1,65 @@
-import type { ComethDirection, Grid, SoloonColor } from "@megaverse/core";
+import type { Cell, Grid } from "@megaverse/core";
+import { Effect, Layer } from "effect";
+import type { ApiError, Progress, RateLimited } from "../src";
+import { MegaverseApi } from "../src";
 
-import { MegaverseClient, type ProgressTracker } from "../src";
-
-export interface ClientCall {
-  readonly method: string;
+/**
+ * Describes a single call recorded by {@link makeRecordingApi}.
+ */
+export interface ApiCall {
+  readonly method: "fetchGoal" | "fetchCurrent" | "place";
   readonly args: readonly unknown[];
 }
 
-export class RecordingClient extends MegaverseClient {
-  public goal: Grid = [];
-  public current: Grid = [];
-  public calls: ClientCall[] = [];
-  public handlers = {
-    placePolyanet: async (_row: number, _column: number) => {},
-    placeSoloon: async (_row: number, _column: number, _color: SoloonColor) => {},
-    placeCometh: async (_row: number, _column: number, _direction: ComethDirection) => {},
-    deletePolyanet: async (_row: number, _column: number) => {},
-    deleteSoloon: async (_row: number, _column: number) => {},
-    deleteCometh: async (_row: number, _column: number) => {},
+export interface RecordingApiOptions {
+  readonly goal?: Grid;
+  readonly current?: Grid;
+  /**
+   * Handler invoked for each `place` call. Defaults to success.
+   * Throwing a tagged error (RateLimited / ApiError) is honored.
+   */
+  readonly onPlace?: (call: {
+    row: number;
+    col: number;
+    cell: Cell;
+  }) => Effect.Effect<void, ApiError | RateLimited>;
+}
+
+/**
+ * Build a fully controllable Layer-backed replacement for the Effect-era
+ * `RecordingClient` used by the class-based tests.
+ */
+export const makeRecordingApi = (options: RecordingApiOptions = {}) => {
+  const calls: ApiCall[] = [];
+
+  const fetchGoal = Effect.sync(() => {
+    calls.push({ method: "fetchGoal", args: [] });
+    return options.goal ?? [];
+  });
+
+  const fetchCurrent = Effect.sync(() => {
+    calls.push({ method: "fetchCurrent", args: [] });
+    return options.current ?? [];
+  });
+
+  const place = ({ row, col, cell }: { row: number; col: number; cell: Cell }) => {
+    calls.push({ method: "place", args: [row, col, cell] });
+    return options.onPlace
+      ? options.onPlace({ row, col, cell })
+      : (Effect.void as Effect.Effect<void, ApiError | RateLimited>);
   };
 
-  public constructor(candidateId: string = "candidate") {
-    super(candidateId, "http://example.test/api");
-  }
+  const layer = Layer.succeed(MegaverseApi, MegaverseApi.of({ fetchGoal, fetchCurrent, place }));
 
-  public override async fetchGoal(): Promise<Grid> {
-    return this.goal;
-  }
+  return { layer, calls };
+};
 
-  public override async fetchCurrent(): Promise<Grid> {
-    return this.current;
-  }
-
-  public override async placePolyanet(row: number, column: number): Promise<void> {
-    this.calls.push({ method: "placePolyanet", args: [row, column] });
-    await this.handlers.placePolyanet(row, column);
-  }
-
-  public override async placeSoloon(
-    row: number,
-    column: number,
-    color: SoloonColor
-  ): Promise<void> {
-    this.calls.push({ method: "placeSoloon", args: [row, column, color] });
-    await this.handlers.placeSoloon(row, column, color);
-  }
-
-  public override async placeCometh(
-    row: number,
-    column: number,
-    direction: ComethDirection
-  ): Promise<void> {
-    this.calls.push({ method: "placeCometh", args: [row, column, direction] });
-    await this.handlers.placeCometh(row, column, direction);
-  }
-
-  public override async deletePolyanet(row: number, column: number): Promise<void> {
-    this.calls.push({ method: "deletePolyanet", args: [row, column] });
-    await this.handlers.deletePolyanet(row, column);
-  }
-
-  public override async deleteSoloon(row: number, column: number): Promise<void> {
-    this.calls.push({ method: "deleteSoloon", args: [row, column] });
-    await this.handlers.deleteSoloon(row, column);
-  }
-
-  public override async deleteCometh(row: number, column: number): Promise<void> {
-    this.calls.push({ method: "deleteCometh", args: [row, column] });
-    await this.handlers.deleteCometh(row, column);
-  }
-}
-
-export interface TrackerEvent {
-  readonly name: string;
-  readonly args: readonly unknown[];
-}
-
-export class RecordingTracker implements ProgressTracker {
-  public events: TrackerEvent[] = [];
-
-  public onStart(initial: Grid, goal: Grid, ts?: number): void {
-    this.record("onStart", initial, goal, ts);
-  }
-
-  public onPlan(total: number, skipped: number, ts?: number): void {
-    this.record("onPlan", total, skipped, ts);
-  }
-
-  public onSolveStart(ts?: number): void {
-    this.record("onSolveStart", ts);
-  }
-
-  public onPlacementStarted(
-    row: number,
-    col: number,
-    cell: string,
-    attempt?: number,
-    ts?: number
-  ): void {
-    this.record("onPlacementStarted", row, col, cell, attempt, ts);
-  }
-
-  public onPlacementFailed(
-    row: number,
-    col: number,
-    reason: string,
-    attempt?: number,
-    ts?: number
-  ): void {
-    this.record("onPlacementFailed", row, col, reason, attempt, ts);
-  }
-
-  public onPlacementSucceeded(
-    row: number,
-    col: number,
-    cell: string,
-    attempt?: number,
-    ts?: number
-  ): void {
-    this.record("onPlacementSucceeded", row, col, cell, attempt, ts);
-  }
-
-  public onComplete(ts?: number): void {
-    this.record("onComplete", ts);
-  }
-
-  private record(name: string, ...args: unknown[]): void {
-    this.events.push({ name, args });
-  }
-}
+/**
+ * Collect all {@link Progress} events produced by running an execute stream
+ * against a provided API layer.
+ */
+export const dispatchTrackerEvents = (events: ReadonlyArray<Progress>) => {
+  const names: string[] = [];
+  for (const e of events) names.push(e._tag);
+  return names;
+};

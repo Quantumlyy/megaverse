@@ -1,5 +1,5 @@
-import { Elysia, t } from "elysia";
 import { SoloonBodySchema, SoloonColorSchema } from "@megaverse/core";
+import { Elysia, t } from "elysia";
 
 import { placeSoloon, remove } from "../lib/candidateHandler";
 

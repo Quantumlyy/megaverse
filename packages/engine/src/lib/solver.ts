@@ -1,217 +1,286 @@
-import type { ComethDirection, Grid, Placement, SoloonColor } from "@megaverse/core";
-import { constants } from "@megaverse/core";
-
-import type { MegaverseClient } from "./api/client";
-
-import { NoopProgressTracker } from "./progress/noop";
-import type { ProgressTracker } from "./progress/tracker";
+import { constants, type Grid, type PlacedCell, type Placement } from "@megaverse/core";
+import { Duration, Effect, Ref, Schedule, Stream } from "effect";
+import { MegaverseApi } from "./api/service";
+import type { ApiError, DecodeError, RateLimited, SolverError } from "./errors";
 
 const { _ } = constants;
 
 /**
- * Immutable execution plan computed from the goal grid and current grid.
+ * Grid diff result produced by {@link plan}. Carries the fetched grids so the
+ * CLI and trackers do not need to re-fetch them before executing.
  */
 export interface Plan {
   /**
+   * Target grid as fetched from `/map/[candidateId]/goal`.
+   */
+  readonly goal: Grid;
+  /**
+   * Current grid as fetched from `/map/[candidateId]` at plan time.
+   */
+  readonly current: Grid;
+  /**
    * Placements that still need to be sent to the API.
    */
-  readonly todo: Placement[];
+  readonly todo: ReadonlyArray<Placement>;
   /**
-   * Number of non-empty goal cells that already matched the current map.
+   * Count of non-empty goal cells that already matched the current map.
    */
   readonly skipped: number;
 }
 
 /**
- * Retry and backoff configuration used for placement requests.
+ * Retry and backoff configuration used by {@link execute}.
  */
 export interface RetryOptions {
   /**
    * Maximum number of attempts per placement, including the first try.
    */
-  maxAttempts: number;
+  readonly maxAttempts: number;
   /**
    * Initial exponential backoff window in milliseconds.
    */
-  baseDelayMs: number;
+  readonly baseDelayMs: number;
   /**
-   * Upper bound for the exponential backoff window in milliseconds.
+   * Upper bound for the per-attempt backoff window in milliseconds.
    */
-  maxDelayMs: number;
+  readonly maxDelayMs: number;
   /**
-   * Optional predicate that decides whether a failed placement should be retried.
+   * Predicate deciding whether an error should trigger another attempt.
+   * Defaults to retrying every {@link SolverError}.
    */
-  shouldRetry?: (err: unknown) => boolean;
+  readonly shouldRetry?: (err: SolverError) => boolean;
 }
 
-const DEFAULT_RETRY: RetryOptions = {
+/**
+ * Runtime options consumed by {@link execute}.
+ */
+export interface ExecuteOptions {
+  /**
+   * Retry policy applied to each placement. Defaults to {@link DEFAULT_RETRY}.
+   */
+  readonly retry?: RetryOptions;
+  /**
+   * Number of placements processed concurrently. Defaults to 4.
+   */
+  readonly concurrency?: number;
+}
+
+/**
+ * Event emitted by the execute stream.
+ *
+ * @remarks
+ * One `Planned` and one `Complete` bookend the stream. `Started`, `Placed`,
+ * and `Failed` are emitted at attempt granularity so the tracker can render
+ * intermediate retries.
+ */
+export type Progress =
+  | { readonly _tag: "Planned"; readonly total: number; readonly skipped: number }
+  | {
+      readonly _tag: "Started";
+      readonly row: number;
+      readonly col: number;
+      readonly cell: PlacedCell;
+      readonly attempt: number;
+    }
+  | {
+      readonly _tag: "Placed";
+      readonly row: number;
+      readonly col: number;
+      readonly cell: PlacedCell;
+      readonly attempt: number;
+    }
+  | {
+      readonly _tag: "Failed";
+      readonly row: number;
+      readonly col: number;
+      readonly reason: string;
+      readonly attempt: number;
+    }
+  | { readonly _tag: "Complete" };
+
+/**
+ * Default retry policy: up to 5 attempts, 500ms base, 8s cap, retry on any error.
+ */
+export const DEFAULT_RETRY: RetryOptions = {
   maxAttempts: 5,
   baseDelayMs: 500,
   maxDelayMs: 8_000,
   shouldRetry: () => true,
 };
 
-const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
-
 /**
- * Plans and executes the work required to transform the current Megaverse into the goal map.
+ * Compute the placement diff between a goal and current grid.
  *
  * @remarks
- * `plan()` fetches the goal and current grids, computes the diff, and reports it to the tracker.
- * `execute()` consumes a previously generated plan with bounded concurrency and per-placement retries.
+ * Pure helper — exposed for tests and CLI status displays. Mirrors the
+ * original class-based `Solver.computePlan` semantics exactly.
  */
-export class Solver {
-  /**
-   * Creates a solver instance.
-   *
-   * @param client - Megaverse API client used for reads and placements.
-   * @param tracker - Progress callback implementation notified throughout planning and execution.
-   * @param retryOptions - Retry policy applied to each placement request.
-   * @param concurrency - Number of placements to run in parallel during execution.
-   */
-  public constructor(
-    private readonly client: MegaverseClient,
-    private readonly tracker: ProgressTracker = new NoopProgressTracker(),
-    private readonly retryOptions: RetryOptions = DEFAULT_RETRY,
-    private readonly concurrency: number = 4
-  ) {}
+export const computePlan = (
+  goal: Grid,
+  current: Grid
+): { todo: ReadonlyArray<Placement>; skipped: number } => {
+  const todo: Placement[] = [];
+  let skipped = 0;
 
-  /**
-   * Plans and immediately executes the remaining placements for the current candidate.
-   *
-   * @returns Promise that resolves once execution finishes.
-   */
-  public async solve() {
-    const plan = await this.plan();
-    await this.execute(plan);
-  }
-
-  /**
-   * Fetches the goal and current maps and computes the placement diff between them.
-   *
-   * @returns Placement plan containing outstanding work and the skipped count.
-   */
-  public async plan(): Promise<Plan> {
-    const [goal, current] = await Promise.all([
-      this.client.fetchGoal(),
-      this.client.fetchCurrent(),
-    ]);
-
-    this.tracker.onStart(current, goal);
-
-    const plan = this.computePlan(goal, current);
-    this.tracker.onPlan(plan.todo.length, plan.skipped);
-
-    return plan;
-  }
-
-  /**
-   * Executes a previously computed placement plan.
-   *
-   * @param plan - Planned placements to process.
-   * @returns Promise that resolves when all workers have drained the plan queue.
-   */
-  public async execute(plan: Plan) {
-    this.tracker.onSolveStart();
-
-    const worker = async () => {
-      while (plan.todo.length > 0) {
-        const p = plan.todo.shift();
-        if (!p) return;
-        await this.placeWithRetry(p);
+  goal.forEach((row, r) => {
+    row.forEach((want, c) => {
+      if (want === _) return;
+      const have = current[r]?.[c] ?? _;
+      if (want === have) {
+        skipped++;
+        return;
       }
-    };
+      todo.push({ row: r, col: c, cell: want });
+    });
+  });
 
-    await Promise.all(Array.from({ length: this.concurrency }, worker));
-    this.tracker.onComplete();
+  return { todo, skipped };
+};
+
+/**
+ * Fetch the goal and current grids in parallel and compute the placement diff.
+ *
+ * @remarks
+ * This is phase one of the two-phase solver. The CLI awaits the plan before
+ * prompting the user, then feeds it into {@link execute} on confirmation.
+ */
+export const plan: Effect.Effect<Plan, ApiError | DecodeError, MegaverseApi> = Effect.gen(
+  function* () {
+    const api = yield* MegaverseApi;
+    const [goal, current] = yield* Effect.all([api.fetchGoal, api.fetchCurrent], {
+      concurrency: 2,
+    });
+    const { todo, skipped } = computePlan(goal, current);
+    return { goal, current, todo, skipped };
   }
+);
+
+/**
+ * Build a Schedule that delays retries with jittered exponential backoff
+ * capped at `maxDelayMs`, limits total attempts to `maxAttempts`, and stops
+ * early when `shouldRetry` returns false for the observed error.
+ */
+const buildRetrySchedule = (options: RetryOptions) => {
+  const maxDelay = Duration.millis(options.maxDelayMs);
+  const shouldRetry = options.shouldRetry ?? (() => true);
+  return Schedule.exponential(Duration.millis(options.baseDelayMs), 2).pipe(
+    Schedule.modifyDelay((d) => (Duration.greaterThan(d, maxDelay) ? maxDelay : d)),
+    Schedule.jittered,
+    Schedule.whileInput((err: SolverError) => shouldRetry(err)),
+    Schedule.intersect(Schedule.recurs(Math.max(0, options.maxAttempts - 1)))
+  );
+};
+
+/**
+ * Execute a previously-computed {@link Plan} as a `Stream` of {@link Progress}
+ * events.
+ *
+ * @remarks
+ * Placements run with bounded concurrency via `Stream.mapEffect`. Each
+ * placement wraps the underlying `MegaverseApi.place` call in a retry loop
+ * that emits `Started` and `Failed`/`Placed` events at attempt granularity,
+ * then retries according to the supplied {@link Schedule}.
+ */
+export const execute = (
+  p: Plan,
+  options: ExecuteOptions = {}
+): Stream.Stream<Progress, never, MegaverseApi> => {
+  const retry = options.retry ?? DEFAULT_RETRY;
+  const concurrency = options.concurrency ?? 4;
+  const schedule = buildRetrySchedule(retry);
 
   /**
-   * Compares the desired grid with the current grid to determine which placements remain.
-   *
-   * @param goal - Desired final grid.
-   * @param current - Current grid state.
-   * @returns Plan containing only missing or mismatched non-empty goal cells.
+   * Run a single placement, collecting attempt-level events (`Started` per
+   * attempt, and either `Placed` on success or `Failed` per failed attempt)
+   * into a chunk. Errors are swallowed so the caller can continue.
    */
-  protected computePlan(goal: Grid, current: Grid): Plan {
-    const todo: Array<Placement> = [];
-    let skipped = 0;
+  const runPlacement = (
+    placement: Placement
+  ): Effect.Effect<ReadonlyArray<Progress>, never, MegaverseApi> =>
+    Effect.gen(function* () {
+      const api = yield* MegaverseApi;
+      const events: Progress[] = [];
+      const attemptRef = yield* Ref.make(0);
 
-    goal.forEach((row, r) => {
-      row.forEach((want, c) => {
-        if (want === _) return;
-        const have = current[r]?.[c] ?? _;
-        if (want === have) {
-          skipped++;
-          return;
-        }
-        todo.push({ row: r, col: c, cell: want });
+      const tryOnce = Effect.gen(function* () {
+        const attempt = yield* Ref.updateAndGet(attemptRef, (n) => n + 1);
+        events.push({
+          _tag: "Started",
+          row: placement.row,
+          col: placement.col,
+          cell: placement.cell,
+          attempt,
+        });
+        return yield* api.place(placement).pipe(
+          Effect.tapError((err) =>
+            Effect.sync(() =>
+              events.push({
+                _tag: "Failed",
+                row: placement.row,
+                col: placement.col,
+                reason: describeError(err),
+                attempt,
+              })
+            )
+          ),
+          Effect.tap(() =>
+            Effect.sync(() =>
+              events.push({
+                _tag: "Placed",
+                row: placement.row,
+                col: placement.col,
+                cell: placement.cell,
+                attempt,
+              })
+            )
+          )
+        );
       });
+
+      yield* tryOnce.pipe(
+        Effect.retry(schedule),
+        Effect.catchAll(() => Effect.void)
+      );
+
+      return events;
     });
 
-    return { todo, skipped };
+  const planned: Progress = {
+    _tag: "Planned",
+    total: p.todo.length,
+    skipped: p.skipped,
+  };
+  const complete: Progress = { _tag: "Complete" };
+
+  return Stream.concat(
+    Stream.make(planned),
+    Stream.fromIterable(p.todo).pipe(
+      Stream.mapEffect(runPlacement, { concurrency }),
+      Stream.mapConcat((events) => events)
+    )
+  ).pipe(Stream.concat(Stream.make(complete)));
+};
+
+/**
+ * Collapse an {@link ApiError} / {@link RateLimited} / {@link DecodeError}
+ * into a human-readable reason string for tracker/log consumption.
+ */
+const describeError = (err: ApiError | RateLimited | DecodeError): string => {
+  switch (err._tag) {
+    case "RateLimited":
+      return `HTTP 429 (retry-after ${err.retryAfterMs}ms)`;
+    case "ApiError":
+      return `${err.method} ${err.path} failed: ${err.status}`;
+    case "DecodeError":
+      return `decode: ${err.reason}`;
   }
+};
 
-  /**
-   * Executes a single placement with retries and tracker notifications.
-   *
-   * @param placement - Placement to attempt.
-   * @returns Promise that resolves when the placement succeeds or retries are exhausted.
-   */
-  protected async placeWithRetry(placement: Placement) {
-    const { row, col, cell } = placement;
-    const opts = this.retryOptions;
-
-    for (let attempt = 1; attempt <= opts.maxAttempts; attempt++) {
-      this.tracker.onPlacementStarted(row, col, cell, attempt);
-
-      try {
-        await this.place(placement);
-        this.tracker.onPlacementSucceeded(row, col, cell, attempt);
-        return;
-      } catch (err) {
-        const reason = err instanceof Error ? err.message : String(err);
-        this.tracker.onPlacementFailed(row, col, reason, attempt);
-
-        const lastAttempt = attempt === opts.maxAttempts;
-        const retryable = opts.shouldRetry?.(err) ?? true;
-        if (lastAttempt || !retryable) return;
-
-        await sleep(this.backoffDelay(attempt));
-      }
-    }
-  }
-
-  /**
-   * Dispatches a placement to the correct Megaverse API endpoint based on the cell token.
-   *
-   * @param placement - Placement to send to the API.
-   * @returns Promise returned by the selected client method.
-   * @throws Error if the placement cell is `SPACE`.
-   */
-  protected place(placement: Placement) {
-    const { row, col, cell } = placement;
-
-    if (cell === "POLYANET") return this.client.placePolyanet(row, col);
-
-    if (cell.endsWith("_SOLOON")) {
-      const color = cell.replace("_SOLOON", "").toLowerCase() as SoloonColor;
-      return this.client.placeSoloon(row, col, color);
-    }
-
-    if (cell.endsWith("_COMETH")) {
-      const direction = cell.replace("_COMETH", "").toLowerCase() as ComethDirection;
-      return this.client.placeCometh(row, col, direction);
-    }
-
-    throw new Error(`Cannot place SPACE at (${row},${col})`);
-  }
-
-  private backoffDelay(attempt: number) {
-    const { maxDelayMs, baseDelayMs } = this.retryOptions;
-
-    const exp = Math.min(maxDelayMs, baseDelayMs * 2 ** (attempt - 1));
-
-    return Math.random() * exp;
-  }
-}
+/**
+ * Convenience that runs {@link plan} then {@link execute}, draining the
+ * Progress stream to completion. Useful for non-interactive/CI usage.
+ */
+export const solve = (
+  options: ExecuteOptions = {}
+): Effect.Effect<void, ApiError | DecodeError, MegaverseApi> =>
+  plan.pipe(Effect.flatMap((p) => Stream.runDrain(execute(p, options))));

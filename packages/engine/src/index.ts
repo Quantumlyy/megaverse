@@ -1,6 +1,10 @@
 /**
- * Megaverse engine primitives for fetching maps, planning placements, and tracking execution progress.
+ * Megaverse engine primitives — Effect Services, Layers, and Streams for
+ * fetching maps, planning placements, and tracking execution progress.
  */
-export * from "./lib/api/client";
+export * from "./lib/api/live";
+export * from "./lib/api/mock";
+export * from "./lib/api/service";
+export * from "./lib/errors";
 export * from "./lib/progress";
 export * from "./lib/solver";

@@ -3,7 +3,7 @@ import { Text } from "ink";
 // biome-ignore lint/style/useImportType: Ugh
 import React from "react";
 
-import { LogLevel, type LogEntry, type TuiState } from "../tracker";
+import { type LogEntry, LogLevel, type TuiState } from "../tracker";
 
 interface LogPanelProps {
   log: TuiState["log"];
