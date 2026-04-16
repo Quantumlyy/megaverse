@@ -3,7 +3,7 @@ import { Text } from "ink";
 // biome-ignore lint/style/useImportType: Ugh
 import React from "react";
 
-import type { TuiState } from "../tracker";
+import type { TuiState } from "../store";
 
 interface StatsPanelProps {
   stats: TuiState["stats"];

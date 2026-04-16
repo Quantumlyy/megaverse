@@ -5,7 +5,7 @@ import { Box, Text } from "ink";
 // biome-ignore lint/style/useImportType: Ugh
 import React from "react";
 
-import type { CellRenderState } from "../tracker";
+import type { CellRenderState } from "../store";
 
 const STATE_COLOR: Record<CellRenderState, string | undefined> = {
   empty: "gray",
