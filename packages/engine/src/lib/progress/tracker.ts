@@ -1,7 +1,15 @@
-import type { Grid, Cell } from "@megaverse/core";
+import type { Cell, Grid } from "@megaverse/core";
 
 // One of these days we will get Temporal 😭
 // https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Temporal
+/**
+ * Event sink used by the solver to report planning and execution lifecycle changes.
+ *
+ * @remarks
+ * The expected call order is `onStart`, `onPlan`, `onSolveStart`, zero or more placement events,
+ * and finally `onComplete`. Timestamp parameters are millisecond epoch values and default to `Date.now()`
+ * when callers do not provide them.
+ */
 export interface ProgressTracker {
   /**
    * @param goal The goal grid (/api/map/[candidateId]/goal)

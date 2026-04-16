@@ -1,5 +1,8 @@
 import type { Grid } from "@megaverse/core";
 
+/**
+ * Aggregate progress metrics derived from solver tracker events.
+ */
 export interface ProgressStats {
   /**
    * The total number of cells in the goal that aren't SPACE and weren't already correct
@@ -39,6 +42,12 @@ export interface ProgressStats {
   readonly durationMs?: number;
 }
 
+/**
+ * Read-only access pattern for progress state snapshots and per-cell histories.
+ *
+ * @typeParam TStatus - Per-cell status representation maintained by the tracker.
+ * @typeParam THistory - History entry shape recorded by the tracker.
+ */
 export interface ProgressRetriever<TStatus, THistory> {
   /**
    * @returns The current progress stats
