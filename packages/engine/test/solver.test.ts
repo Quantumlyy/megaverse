@@ -71,7 +71,7 @@ describe("execute", () => {
 
     expect(calls.filter((c) => c.method === "place")).toHaveLength(3);
     expect(calls.filter((c) => c.method === "place").map((c) => c.args[2])).toEqual([P, R, L]);
-    expect(events[0]).toEqual({ _tag: "Planned", total: 3, skipped: 0 });
+    expect(events[0]).toMatchObject({ _tag: "Planned", plan: { skipped: 0 } });
     expect(events[events.length - 1]).toEqual({ _tag: "Complete" });
     expect(events.filter((e) => e._tag === "Placed")).toHaveLength(3);
   });

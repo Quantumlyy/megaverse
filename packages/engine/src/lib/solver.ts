@@ -74,7 +74,7 @@ export interface ExecuteOptions {
  * intermediate retries.
  */
 export type Progress =
-  | { readonly _tag: "Planned"; readonly total: number; readonly skipped: number }
+  | { readonly _tag: "Planned"; readonly plan: Plan }
   | {
       readonly _tag: "Started";
       readonly row: number;
@@ -245,11 +245,7 @@ export const execute = (
       return events;
     });
 
-  const planned: Progress = {
-    _tag: "Planned",
-    total: p.todo.length,
-    skipped: p.skipped,
-  };
+  const planned: Progress = { _tag: "Planned", plan: p };
   const complete: Progress = { _tag: "Complete" };
 
   return Stream.concat(

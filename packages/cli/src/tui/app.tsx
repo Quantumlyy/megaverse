@@ -11,7 +11,7 @@ import Header from "./components/header";
 import LogPanel from "./components/log-panel";
 import StatsPanel from "./components/stats-panel";
 import { useSubscriptionRef } from "./hooks/useSubscriptionRef";
-import { emptyState, makeStore, type TuiStore } from "./store";
+import { makeStore, updateWith } from "./store";
 
 interface AppProps {
   readonly runtime: ManagedRuntime.ManagedRuntime<MegaverseApi, ConfigError.ConfigError>;
@@ -22,30 +22,25 @@ interface AppProps {
 type Phase = "planning" | "ready" | "executing" | "done" | "error";
 
 const App: React.FC<AppProps> = ({ runtime, candidateId, baseUrl }) => {
-  /**
-   * `makeStore` is a synchronous `Effect` (just `SubscriptionRef.make`) so we
-   * can build it once per mount without going through fork/promise gymnastics.
-   */
-  const store: TuiStore = useMemo(() => Effect.runSync(makeStore), []);
-  const state = useSubscriptionRef(store.ref, runtime);
+  const store = useMemo(() => Effect.runSync(makeStore), []);
+  const apply = useMemo(() => updateWith(store), [store]);
+  const state = useSubscriptionRef(store, runtime);
 
   const [plan, setPlan] = useState<Plan | null>(null);
   const [phase, setPhase] = useState<Phase>("planning");
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const executionFiberRef = useRef<Fiber.RuntimeFiber<void, unknown> | null>(null);
 
+  // Planning phase: fetch the plan, seed the store via a synthetic Planned event.
   useEffect(() => {
     const fiber = runtime.runFork(
       planEffect.pipe(
+        Effect.tap((p) => apply({ _tag: "Planned", plan: p })),
         Effect.tap((p) =>
-          store.seed(p).pipe(
-            Effect.tap(() =>
-              Effect.sync(() => {
-                setPlan(p);
-                setPhase("ready");
-              })
-            )
-          )
+          Effect.sync(() => {
+            setPlan(p);
+            setPhase("ready");
+          })
         ),
         Effect.catchAllCause((cause) =>
           Effect.sync(() => {
@@ -58,8 +53,10 @@ const App: React.FC<AppProps> = ({ runtime, candidateId, baseUrl }) => {
     return () => {
       Effect.runFork(Fiber.interrupt(fiber));
     };
-  }, [runtime, store]);
+  }, [runtime, apply]);
 
+  // Execution phase: drain the Progress stream into the store. The stream's
+  // own Planned event is a no-op re-seed — idempotent.
   useInput((input, key) => {
     if (phase === "ready" && plan && (key.return || input === " ")) {
       setPhase("executing");
@@ -68,7 +65,7 @@ const App: React.FC<AppProps> = ({ runtime, candidateId, baseUrl }) => {
           retry: { maxAttempts: 10, baseDelayMs: 1000, maxDelayMs: 20_000 },
           concurrency: 3,
         }).pipe(
-          Stream.runForEach(store.applyEvent),
+          Stream.runForEach(apply),
           Effect.tap(() => Effect.sync(() => setPhase("done"))),
           Effect.catchAllCause((cause) =>
             Effect.sync(() => {
@@ -84,31 +81,27 @@ const App: React.FC<AppProps> = ({ runtime, candidateId, baseUrl }) => {
   useEffect(() => {
     return () => {
       const fiber = executionFiberRef.current;
-      if (fiber) {
-        Effect.runFork(Fiber.interrupt(fiber));
-      }
+      if (fiber) Effect.runFork(Fiber.interrupt(fiber));
     };
   }, []);
-
-  const view = state ?? emptyState;
 
   return (
     <FullScreenBox flexDirection="column">
       <Header candidateId={candidateId} baseUrl={baseUrl} />
       <Box flexGrow={1}>
         <Box flexGrow={1} flexBasis={0}>
-          <GridPanel title="Goal" grid={view.goal} />
+          <GridPanel title="Goal" grid={state.goal} />
         </Box>
         <Box flexGrow={1} flexBasis={0}>
-          <GridPanel title="Current" grid={view.grid} cellStates={view.cellStates} />
+          <GridPanel title="Current" grid={state.grid} cellStates={state.cellStates} />
         </Box>
       </Box>
       <Box height={14}>
         <Box flexGrow={1}>
-          <LogPanel log={view.log} />
+          <LogPanel log={state.log} />
         </Box>
         <Box width={32}>
-          <StatsPanel stats={view.stats} complete={view.complete} />
+          <StatsPanel stats={state.stats} complete={state.complete} />
         </Box>
       </Box>
       <Prompt phase={phase} errorMessage={errorMessage} />
